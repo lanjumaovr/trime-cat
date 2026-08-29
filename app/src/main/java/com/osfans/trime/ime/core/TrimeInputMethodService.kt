@@ -588,15 +588,17 @@ open class TrimeInputMethodService : LifecycleInputMethodService() {
     fun commitText(text: String) {
         val ic = currentInputConnection ?: return
 
+        val replaced = TextReplacer.transform(text)
+
         // when composing text equals commit content, finish composing text as-is
-        if (composingText.isNotEmpty() && composingText == text) {
+        if (composingText.isNotEmpty() && composingText == replaced) {
             ic.finishComposingText()
         } else {
-            ic.commitText(text, 1)
+            ic.commitText(replaced, 1)
         }
-        lastCommittedText = text
+        lastCommittedText = replaced
         composingText = ""
-        InputFeedbackManager.textCommitSpeak(text)
+        InputFeedbackManager.textCommitSpeak(replaced)
     }
 
     /**
