@@ -11,21 +11,22 @@ import timber.log.Timber
 import java.io.File
 
 /**
- * 文本替换引擎：在上屏前对文本应用一套替换规则。
+ * 文本替换引擎：在上屏前对文本应用一套替换规则（猫娘化）。
  *
  * 规则从 [RULES_FILE]（位于用户数据目录）读取，格式为 JSON：
  * ```json
  * {
  *   "replaces": [
- *     { "match": "我", "to": "本喵" },
- *     { "match": "你", "to": "主人" }
+ *     { "match": "什么", "to": "什喵" },
+ *     { "match": "你", "to": "主人" },
+ *     { "match": "我", "to": "猫猫" }
  *   ],
- *   "suffixes": ["喵", "🐾"],
+ *   "suffixes": ["喵"],
  *   "puncts": "。，！？.,!?~～;；:：、"
  * }
  * ```
  *
- * 配置文件不存在或解析失败时，回退到内置默认规则。
+ * 配置文件不存在时自动生成默认配置；解析失败时回退到内置默认规则。
  */
 object TextReplacer {
 
@@ -35,15 +36,31 @@ object TextReplacer {
     private const val RULES_FILE_NAME = "cat_rules.json"
 
     /** 默认标点尾缀（标点后依次追加）。 */
-    private val DEFAULT_SUFFIXES = listOf("喵", "🐾")
+    private val DEFAULT_SUFFIXES = listOf("喵")
 
     /** 默认标点集合。 */
     private val DEFAULT_PUNCTS = "。，！？.,!?~～;；:：、"
 
-    /** 默认精确替换规则（按顺序应用）。 */
+    /**
+     * 默认精确替换规则（按顺序应用）。
+     *
+     * 顺序很重要：先替换长词/短语，再替换单字；
+     * 称呼类替换直接落到最终形态（参考 QQ 猫猫助手）。
+     */
     private val DEFAULT_REPLACES = listOf(
+        // 基础猫娘化（短语优先，避免被单字规则破坏）
+        "什么" to "什喵",
+        "在吗" to "在嘛",
+        "不要啊" to "不要呀",
+        "他" to "她",
+        "是" to "素",
+        "了" to "惹",
+        "啦" to "啦喵",
+        "哦" to "哦喵",
+        "嗯" to "嗯喵",
+        // 称呼（直接落到最终形态，避免「咱」「您」中间态残留）
         "你" to "主人",
-        "我" to "本喵",
+        "我" to "猫猫",
     )
 
     /** 内存中缓存的规则。 */
@@ -81,13 +98,15 @@ object TextReplacer {
     }
 
     /**
-     * 从配置文件加载规则；失败时回退到默认规则。
+     * 从配置文件加载规则；文件不存在时自动生成默认配置，解析失败时回退到默认规则。
      */
     private fun loadRules(): Rules {
         val file = rulesFile()
         if (!file.exists()) {
-            Timber.d("规则文件不存在，使用默认规则: %s", file.absolutePath)
-            return defaultRules()
+            Timber.d("规则文件不存在，生成默认配置: %s", file.absolutePath)
+            val def = defaultRules()
+            writeRulesFile(file, def)
+            return def
         }
         return try {
             val text = file.readText()
@@ -95,6 +114,29 @@ object TextReplacer {
         } catch (e: Exception) {
             Timber.w(e, "规则文件解析失败，使用默认规则")
             defaultRules()
+        }
+    }
+
+    private fun writeRulesFile(file: File, rules: Rules) {
+        try {
+            val replacesArr = JSONArray()
+            for ((match, to) in rules.replaces) {
+                val item = JSONObject()
+                item.put("match", match)
+                item.put("to", to)
+                replacesArr.put(item)
+            }
+            val suffixesArr = JSONArray()
+            for (s in rules.suffixes) {
+                suffixesArr.put(s)
+            }
+            val obj = JSONObject()
+            obj.put("replaces", replacesArr)
+            obj.put("suffixes", suffixesArr)
+            obj.put("puncts", rules.puncts)
+            file.writeText(obj.toString(2))
+        } catch (e: Exception) {
+            Timber.w(e, "写入默认规则文件失败")
         }
     }
 
